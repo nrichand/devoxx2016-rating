@@ -1,0 +1,148 @@
+---
+title: "Analyse de devox 2016"
+author: "by Nathaniel Richand"
+date: "24 avril 2016"
+output: html_document
+---
+
+Devoxx France 2016 c'est terminé. Personnellement j'ai trouvé cette mouture vraiment bien. Je me suis amusé à faire cette rapide page pour voir si mon ressenti était partagé, puis pour voir les trends de ce qui a bien marché à Devoxx.
+
+> *N'étant pas propriétaire de la donnée et ne connaissant pas son statut celle-ci n'est pas commitée sur le repo.*
+
+>*A noter : je n'ai réussi qu'à récupérer les notes de 197 slots sur les 220 du programmes.*
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(Hmisc)
+library(ggplot2)
+library(RColorBrewer)
+confs <- read.csv(file = "devoxxRating.csv")
+```
+
+# Petit tour sur les soumissions
+
+## Nombre de sujets
+
+Le gros de devoxx c'est toujours les conférences :
+```{r, echo=FALSE}
+ggplot(confs, aes(talkType, fill=confs$talkType)) + geom_bar() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  guides(fill=FALSE)
+```
+
+Par contre si on ramène à la durée des confs les hands On sont au niveau des conférences.
+```{r, echo=FALSE}
+df <- rbind(c("BOF (Bird of a Feather)", 50), c("Conference", 45), c("Hands-on Labs", 180), c("Keynote", 20), c("Quickie", 15), c("Tools-in-Action", 30), c("University", 180))
+df <- as.data.frame(df)
+names(df) <- c("talkType", "talkDuration")
+df$talkDuration <- as.numeric(paste(df$talkDuration))
+confs <- merge(confs, df, by="talkType")
+
+repartition <- summarize(confs$talkDuration, confs$talkType, sum)
+
+pie(repartition$`confs$talkDuration`, repartition$`confs$talkType`, clockwise=TRUE, radius=1, col=brewer.pal(7,"Set1"), border="white", main="Repartition de devoxx par temps")
+```
+
+Toujours un peu d'anglais à DevoxxFR, mais pas énormément non plus et surtout sur les conférences :
+```{r, echo=FALSE}
+ggplot(confs, aes(talkType, fill=confs$lang)) + geom_bar() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+En terme de track, nous avons une track plus représentée que les autres :
+```{r, echo=FALSE}
+ggplot(confs, aes(track, fill=confs$track)) + geom_bar() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  guides(fill=FALSE)
+```
+
+Si on zoome sur les propositions de la track Devops, Agilité, Méthodologie & Tests :
+```{r, echo=FALSE}
+subset(confs, trackId == 'agTest')$title
+```
+*Peut-être mettre la track Devops à part?*
+
+
+A noter que les sessions en anglais sont réparties sur toutes les tracks :
+```{r, echo=FALSE}
+ggplot(confs, aes(track, fill=confs$lang)) + geom_bar() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Analyse des résumés de sessions
+```{r echo=F, warning=FALSE, message=FALSE}
+library(tm)
+library(SnowballC)
+library(wordcloud)
+
+jeopCorpus <- Corpus(VectorSource(confs$summary))
+jeopCorpus <- tm_map(jeopCorpus, content_transformer(tolower))
+jeopCorpus <- tm_map(jeopCorpus, PlainTextDocument)
+jeopCorpus <- tm_map(jeopCorpus, removeWords, stopwords('english'))
+jeopCorpus <- tm_map(jeopCorpus, removeWords, stopwords('french'))
+jeopCorpus <- tm_map(jeopCorpus, removeWords, c("comment", "plus", "nous", "bien", "dans", "tous", "comme", "venez", "tout", "peut")) 
+
+wordcloud(jeopCorpus, max.words = 80, random.order = FALSE, colors=brewer.pal(9, "PuBuGn"))
+```
+
+Java est toujours au centre de Devoxx, a noter la grosse cote de Docker cette année...
+
+# Notation des talks
+
+Faisons un tour sur les notes moyennes des sujets
+```{r, echo=FALSE}
+summary(confs$avg)
+```
+
+En moyenne et le median sont autour de 4. La note max est de 4.9 et la min est à 3 (je me demande si ce n'est pas le service qui filtre les sessions < 3 ?).
+
+
+### Notation par types de talks
+
+Prêt de la moitié des votes ont été fait sur les conférences :
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+repartition <- summarize(confs$count, confs$talkType, sum)
+
+pielabels <- paste(repartition$`confs$talkType`, repartition$`confs$count`, sep = " / ")
+
+pie(repartition$`confs$count`, labels=pielabels, clockwise=TRUE, radius=1, col=brewer.pal(7,"Set1"), border="white", main="NB de votes au total par type de talks")
+```
+
+Il y a peu de votes en moyenne pour les BOF (normal car le nombre de participant y est plus faible), par contre les university sont beaucoup votés.
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+repartition <- summarize(confs$count, confs$talkType, mean)
+
+qplot(repartition$`confs$talkType`, repartition$`confs$count`) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ggtitle("Nombre de votes moyen par type de talks") +
+  labs(x="Type de talk", y="NB votes moyen")
+```
+
+Les BOF & Universités sont plebiscités, les Tools In Action ont moins plu cette année :
+```{r, echo=FALSE}
+ggplot(confs, aes(talkType, avg, colour = talkType)) + geom_point() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  guides(colour=FALSE) +
+  ggtitle("Vote par type de talk") 
+
+ggplot(confs, aes(talkType, avg, fill = talkType)) + geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  guides(fill=FALSE) +
+  ggtitle("Vote par type de talk")
+```
+
+
+### Notation par tracks
+```{r, echo=FALSE}
+ggplot(confs, aes(track, avg, colour = track)) + geom_point() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  guides(colour=FALSE) +
+  ggtitle("Vote par type de track")
+
+ggplot(confs, aes(track, avg, fill = track)) + geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  guides(fill=FALSE) +
+  ggtitle("Vote par type de track")
+```
+
+4 tracks sortent du lot : Java/JVM, Future & Robotique, Langages alternatifs, Mobile & IOT. Cependant, les votes de la track langages alternatifs sont plus répartis.
+A noter aussi que la track Web, HTML5 et UX est un peu moins bien notée.
